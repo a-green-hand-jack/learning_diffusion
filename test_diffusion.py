@@ -25,14 +25,29 @@ def get_default_configs():
         "mean": [0.5],
         "std": [0.5],
     }
+    data_config = {
+        "name": "mnist",
+        "root": "/projects/p32013/WJK/learning_diffusion/data/",
+        "mean": [0.5],
+        "std": [0.5],
+        
+        # 方式1：指定具体数量
+        "subset_size": 100,  # 使用1000张图片
+        
+        # 或者 方式2：指定比例
+        # "subset_ratio": 0.1,  # 使用10%的数据
+        
+        # 可选：是否随机采样
+        "subset_random": True,  # 随机采样，False则按顺序取
+    }
 
     model_config = {
         "type": "ddim",  # 'ddpm' or 'ddim'
         "n_steps": 1000,
         # DDIM specific configs
         "ddim_sampling_steps": 100,
-        "ddim_discretize": "quad",  # "uniform" or "quad"
-        "ddim_eta": 0.1,
+        "ddim_discretize": "uniform",  # "uniform" or "quad"
+        "ddim_eta": 0.0,
     }
 
     training_config = {
@@ -73,20 +88,59 @@ def load_config(path):
 
 
 def get_dataset(data_config):
-    """Initialize dataset based on configuration"""
-    transform = transforms.Compose(
-        [
-            transforms.ToTensor(),
-            transforms.Normalize(data_config["mean"], data_config["std"]),
-        ]
-    )
+    """
+    Initialize dataset based on configuration
+    
+    Args:
+        data_config: dict containing:
+            - name: dataset name
+            - root: data root directory
+            - mean: normalization mean
+            - std: normalization std
+            - subset_size: (optional) number of samples to use
+            - subset_ratio: (optional) ratio of data to use (0-1)
+            - subset_random: (optional) whether to randomly sample (default: True)
+    """
+    transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize(data_config["mean"], data_config["std"]),
+    ])
 
     if data_config["name"].lower() == "mnist":
-        dataset = datasets.MNIST(
-            data_config["root"], train=True, download=True, transform=transform
+        full_dataset = datasets.MNIST(
+            data_config["root"], 
+            train=True, 
+            download=True, 
+            transform=transform
         )
     else:
         raise NotImplementedError(f"Dataset {data_config['name']} not implemented")
+
+    # 处理数据子集
+    if "subset_size" in data_config or "subset_ratio" in data_config:
+        total_size = len(full_dataset)
+        
+        # 确定子集大小
+        if "subset_size" in data_config:
+            subset_size = min(data_config["subset_size"], total_size)
+        else:
+            subset_size = int(total_size * data_config["subset_ratio"])
+            
+        # 是否随机采样
+        random_subset = data_config.get("subset_random", True)
+        
+        if random_subset:
+            indices = torch.randperm(total_size)[:subset_size]
+        else:
+            indices = torch.arange(subset_size)
+            
+        dataset = torch.utils.data.Subset(full_dataset, indices)
+        
+        print(f"Using {subset_size} samples out of {total_size} "
+              f"({'random' if random_subset else 'sequential'} sampling)")
+    else:
+        dataset = full_dataset
+        print(f"Using full dataset with {len(dataset)} samples")
 
     return dataset
 
@@ -199,7 +253,7 @@ def train_and_sample(config):
     logger.info("Starting training...")
     for epoch in range(n_epochs):
         total_loss = 0
-        # ipdb.set_trace()  # 这里会触发断点
+        # # ipdb.set_trace()  # 这里会触发断点
         for batch_idx, (data, _) in enumerate(dataloader):
             data = data.to(device)
             optimizer.zero_grad()
@@ -207,7 +261,7 @@ def train_and_sample(config):
             loss = diffusion_model.loss(data)
             loss.backward()
             optimizer.step()
-            # ipdb.set_trace()  # 这里会触发断点
+            # # ipdb.set_trace()  # 这里会触发断点
 
             total_loss += loss.item()
 
@@ -221,6 +275,7 @@ def train_and_sample(config):
 
         if (epoch + 1) % save_interval == 0:
             logger.info(f"Generating samples for epoch {epoch}...")
+            # ipdb.set_trace()  # 这里会触发断点
             with torch.no_grad():
                 samples = diffusion_model.sample_backforward(
                     shape=(16, *tuple(dataset[0][0].shape))
