@@ -111,7 +111,7 @@ class DDIM(DDPM):
         )
 
         # Clip predicted x0 to [-1, 1] to improve sample quality
-        x0_predicted = torch.clamp(x0_predicted, -1.0, 1.0)
+        # x0_predicted = torch.clamp(x0_predicted, -1.0, 1.0)
 
         # DDIM deterministic formula
         x_t_prev = (

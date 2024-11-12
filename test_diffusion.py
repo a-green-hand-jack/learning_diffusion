@@ -7,10 +7,14 @@ from pathlib import Path
 import datetime
 import json
 import argparse
+import logging
+import sys
+import ipdb
 
 from diffusion.ddpm import DDPM
 from diffusion.ddim import DDIM
 from model import UNet
+from utils import set_global_random_seed
 
 
 def get_default_configs():
@@ -26,23 +30,24 @@ def get_default_configs():
         "type": "ddim",  # 'ddpm' or 'ddim'
         "n_steps": 1000,
         # DDIM specific configs
-        "ddim_sampling_steps": 50,
+        "ddim_sampling_steps": 100,
         "ddim_discretize": "quad",  # "uniform" or "quad"
-        "ddim_eta": 0.0,
+        "ddim_eta": 0.1,
     }
 
     training_config = {
-        "batch_size": 512,
-        "num_workers": 4,
+        "batch_size": 16,
+        "num_workers": 5,
         "learning_rate": 2e-4,
         "n_epochs": 50,
-        "save_interval": 1,
-        "log_interval": 100,
-        'save_path':"/projects/p32013/WJK/learning_diffusion/results/"
+        "save_interval": 1,  # epoch
+        "log_interval": 100,  # step
+        "save_path": "/projects/p32013/WJK/learning_diffusion/results/",
+        "seed": 42,
     }
 
     unet_config = {
-        "channels": [10, 20, 40, 80],
+        "channels": [10, 20,40 ,80],
         "pe_dim": 10,
         "residual": True,
     }
@@ -103,11 +108,39 @@ def get_diffusion_model(model_config, eps_model, device):
         raise NotImplementedError(f"Model type {model_config['type']} not implemented")
 
 
+def setup_logger(save_dir):
+    """设置logger，同时输出到文件和控制台"""
+    logger = logging.getLogger("diffusion_training")
+    logger.setLevel(logging.DEBUG)
+
+    # 创建格式器
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
+    # 文件处理器 - DEBUG及以上级别
+    fh = logging.FileHandler(save_dir / "debug.log")
+    fh.setLevel(logging.DEBUG)
+    fh.setFormatter(formatter)
+
+    # 控制台处理器 - INFO及以上级别
+    ch = logging.StreamHandler(sys.stdout)
+    ch.setLevel(logging.INFO)
+    ch.setFormatter(formatter)
+
+    # 添加处理器
+    logger.addHandler(fh)
+    logger.addHandler(ch)
+
+    return logger
+
+
 def train_and_sample(config):
-    # Set up paths
+    # 设置路径
     tic = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     experiment_name = f"{config['model']['type']}_{config['data']['name']}_{tic}"
-    save_dir = Path(config["training"]['save_path']) / experiment_name
+    save_dir = Path(config["training"]["save_path"]) / experiment_name
     save_image_folder = save_dir / "samples"
     ckpt_folder = save_dir / "checkpoint"
     config_path = save_dir / "config.json"
@@ -115,15 +148,19 @@ def train_and_sample(config):
 
     save_image_folder.mkdir(parents=True, exist_ok=True)
     ckpt_folder.mkdir(parents=True, exist_ok=True)
-    
-    # Save configuration
+
+    # 设置logger
+    logger = setup_logger(save_dir)
+
+    # 保存配置
     save_config(config, config_path)
+    logger.debug(f"Configuration saved to {config_path}")
 
-    # Device configuration
+    # 设备配置
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Using device: {device}")
+    logger.info(f"Using device: {device}")
 
-    # Dataset setup
+    # 数据集设置
     dataset = get_dataset(config["data"])
     dataloader = DataLoader(
         dataset,
@@ -131,8 +168,11 @@ def train_and_sample(config):
         shuffle=True,
         num_workers=config["training"]["num_workers"],
     )
+    logger.debug(
+        f"Dataset size: {len(dataset)}, Batch size: {config['training']['batch_size']}"
+    )
 
-    # Model setup
+    # 模型设置
     eps_model = UNet(
         n_steps=config["model"]["n_steps"],
         image_shape=tuple(dataset[0][0].shape),
@@ -140,19 +180,26 @@ def train_and_sample(config):
     ).to(device)
 
     diffusion_model = get_diffusion_model(config["model"], eps_model, device)
+    logger.info(f"Initialized {config['model']['type'].upper()} model")
+    logger.debug(f"Model parameters: {sum(p.numel() for p in eps_model.parameters())}")
 
-    # Optimizer setup
+    # 优化器设置
     optimizer = optim.Adam(
         eps_model.parameters(), lr=config["training"]["learning_rate"]
     )
+    logger.debug(
+        f"Optimizer: Adam with learning rate {config['training']['learning_rate']}"
+    )
 
-    # Training loop
+    # 训练循环
     n_epochs = config["training"]["n_epochs"]
     save_interval = config["training"]["save_interval"]
     log_interval = config["training"]["log_interval"]
 
+    logger.info("Starting training...")
     for epoch in range(n_epochs):
         total_loss = 0
+        # ipdb.set_trace()  # 这里会触发断点
         for batch_idx, (data, _) in enumerate(dataloader):
             data = data.to(device)
             optimizer.zero_grad()
@@ -160,31 +207,38 @@ def train_and_sample(config):
             loss = diffusion_model.loss(data)
             loss.backward()
             optimizer.step()
+            # ipdb.set_trace()  # 这里会触发断点
 
             total_loss += loss.item()
 
             if batch_idx % log_interval == 0:
-                print(f"Epoch {epoch}, Batch {batch_idx}, Loss: {loss.item():.4f}")
+                logger.debug(
+                    f"Epoch {epoch}, Batch {batch_idx}, Loss: {loss.item():.4f}"
+                )
 
         avg_loss = total_loss / len(dataloader)
-        print(f"Epoch {epoch} Average Loss: {avg_loss:.4f}")
+        logger.info(f"Epoch {epoch} Average Loss: {avg_loss:.4f}")
 
         if (epoch + 1) % save_interval == 0:
-            print("Generating samples...")
+            logger.info(f"Generating samples for epoch {epoch}...")
             with torch.no_grad():
                 samples = diffusion_model.sample_backforward(
-                    shape=(16, *dataset[0][0].shape)
+                    shape=(16, *tuple(dataset[0][0].shape))
                 )
+                # ipdb.set_trace()  # 这里会触发断点
 
                 plt.figure(figsize=(10, 10))
                 for i in range(16):
                     plt.subplot(4, 4, i + 1)
                     plt.imshow(samples[i, 0].cpu().numpy(), cmap="gray")
                     plt.axis("off")
-                plt.savefig(save_image_folder / f"samples_epoch_{epoch}.png")
+                sample_path = save_image_folder / f"samples_epoch_{epoch}.png"
+                plt.savefig(sample_path)
                 plt.close()
+                logger.debug(f"Saved samples to {sample_path}")
 
-    # Save final model
+    # 保存最终模型
+    logger.info("Saving final model...")
     torch.save(
         {
             "model_state_dict": eps_model.state_dict(),
@@ -193,6 +247,8 @@ def train_and_sample(config):
         },
         ckpt_path,
     )
+    logger.info(f"Model saved to {ckpt_path}")
+    logger.info("Training completed!")
 
 
 if __name__ == "__main__":
@@ -201,11 +257,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.config:
-        # Load configuration from JSON file
         config = load_config(args.config)
     else:
-        # Use default configuration
         config = get_default_configs()
-
-    # Start training
+    set_global_random_seed(config['training']['seed'])
     train_and_sample(config)
