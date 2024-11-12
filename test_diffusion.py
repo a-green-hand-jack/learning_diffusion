@@ -19,20 +19,16 @@ from utils import set_global_random_seed
 
 def get_default_configs():
     """Get default configuration dictionaries"""
+
     data_config = {
         "name": "mnist",
         "root": "/projects/p32013/WJK/learning_diffusion/data/",
-        "mean": [0.5],
-        "std": [0.5],
-    }
-    data_config = {
-        "name": "mnist",
-        "root": "/projects/p32013/WJK/learning_diffusion/data/",
-        "mean": [0.5],
-        "std": [0.5],
+        "mean": [0.1307],
+        "std": [0.3081],
+        # get mean and std from https://datascience.stackexchange.com/questions/46228/how-mean-and-deviation-come-out-with-mnist-dataset
         
         # 方式1：指定具体数量
-        "subset_size": 100,  # 使用1000张图片
+        # "subset_size": 100,  # 使用1000张图片
         
         # 或者 方式2：指定比例
         # "subset_ratio": 0.1,  # 使用10%的数据
@@ -45,15 +41,15 @@ def get_default_configs():
         "type": "ddim",  # 'ddpm' or 'ddim'
         "n_steps": 1000,
         # DDIM specific configs
-        "ddim_sampling_steps": 100,
+        "ddim_sampling_steps": 1000,
         "ddim_discretize": "uniform",  # "uniform" or "quad"
         "ddim_eta": 0.0,
     }
 
     training_config = {
-        "batch_size": 16,
+        "batch_size": 512,
         "num_workers": 5,
-        "learning_rate": 2e-4,
+        "learning_rate": 2e-3,
         "n_epochs": 50,
         "save_interval": 1,  # epoch
         "log_interval": 100,  # step

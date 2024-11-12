@@ -53,6 +53,11 @@ scancel $job_name   # sample: 3845773
 ## 2024-11-12
 ```cmd
 salloc --account=p32013 -p gengpu --gres gpu:a100:1 --cpus-per-task 12 --mem 50G --constraint=sxm -t 24:00:00
+salloc: Pending job allocation 6510374
+salloc: job 6510374 queued and waiting for resources
+salloc: job 6510374 has been allocated resources
+salloc: Granted job allocation 6510374
+salloc: Nodes qgpu2013 are ready for job
 ```
 
 ## 2024-11-12
