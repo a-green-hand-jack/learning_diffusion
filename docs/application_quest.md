@@ -65,3 +65,14 @@ salloc: Nodes qgpu2013 are ready for job
 salloc --account=p32013 -p normal --cpus-per-task 4 --mem 10G -t 24:00:00
 salloc: Pending job allocation 6511792                                                                                   salloc: job 6511792 queued and waiting for resources                                                                                salloc: job 6511792 has been allocated resources                                                                                 salloc: Granted job allocation 6511792                                                                                   salloc: Nodes qnode9027 are ready for job  
 ```
+
+## 2024-11-12-15：29
+```cmd
+salloc --account=p32013 -p gengpu --gres gpu:a100:1 --cpus-per-task 12 --mem 50G --constraint=sxm -t 24:00:00
+salloc: Pending job allocation 6801856
+salloc: job 6801856 queued and waiting for resources
+salloc: job 6801856 has been allocated resources
+salloc: Granted job allocation 6801856
+salloc: Nodes qgpu2012 are ready for job
+```
+

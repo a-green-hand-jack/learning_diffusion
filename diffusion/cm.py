@@ -1,17 +1,4 @@
 """
-[Consistency Models](https://arxiv.org/abs/2303.01469) are a new family of generative models that achieve high sample quality without adversarial training. They support fast one-step generation by design, while still allowing for few-step sampling to trade compute for sample quality. They also support zero-shot data editing, like image inpainting, colorization, and super-resolution, without requiring explicit training on these tasks.
-
-
-### Key Idea
-
-_Learn a model that maps any arbitrary point in the latent space to the initial data point, i.e: if points lie on the same probability flow trajectory they are mapped to the same initial data point._
-
-### Contributions
-
-- Single step sampling
-- Zero-shot data editing: inpainting, outpainting e.t.c
-
-### Code
 This code is learned from https://github.com/Kinyugo/consistency_models
 """
 
@@ -27,8 +14,8 @@ from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
 from torchvision.utils import make_grid
 from tqdm.auto import tqdm
 
-from ..model import UNet
-from ..utils import pad_dims_like, update_ema_model_
+from model import UNet
+from utils import pad_dims_like, update_ema_model_
 
 
 def timesteps_schedule(

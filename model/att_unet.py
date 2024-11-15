@@ -351,5 +351,6 @@ class AttUNet(nn.Module):
 
         return model
 
+
 if __name__ == "__main__":
     summary(AttUNet(AttUNetConfig()), input_size=((1, 3, 32, 32), (1,)))

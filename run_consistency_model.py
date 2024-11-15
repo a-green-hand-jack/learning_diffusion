@@ -1,12 +1,5 @@
 from dataclasses import dataclass
 from typing import Optional, Tuple
-from diffusion import (
-    ConsistencySamplingAndEditing,
-    ConsistencyTraining,
-    LitConsistencyModel,
-    LitConsistencyModelConfig,
-)
-from model import AttUNet, AttUNetConfig
 
 from lightning import LightningDataModule, Trainer, seed_everything
 from lightning.pytorch.callbacks import LearningRateMonitor
@@ -15,12 +8,20 @@ from torch.utils.data import DataLoader
 from torchvision import transforms as T
 from torchvision.datasets import ImageFolder
 
+from diffusion import (
+    ConsistencySamplingAndEditing,
+    ConsistencyTraining,
+    LitConsistencyModel,
+    LitConsistencyModelConfig,
+)
+from model import AttUNet, AttUNetConfig, UNet, UNetConfig
+
 
 @dataclass
 class ImageDataModuleConfig:
     data_dir: str = "butterflies256"
-    image_size: Tuple[int, int] = (32, 32)
-    batch_size: int = 32
+    image_size: Tuple[int, int] = (256, 256)
+    batch_size: int = 8
     num_workers: int = 8
     pin_memory: bool = True
     persistent_workers: bool = True
@@ -57,13 +58,13 @@ class ImageDataModule(LightningDataModule):
 @dataclass
 class TrainingConfig:
     image_dm_config: ImageDataModuleConfig
-    AttUNet_config: AttUNetConfig
+    UNet_config: UNetConfig
     consistency_training: ConsistencyTraining
     consistency_sampling: ConsistencySamplingAndEditing
     lit_cm_config: LitConsistencyModelConfig
     trainer: Trainer
     seed: int = 42
-    model_ckpt_path: str = "checkpoints/cm"
+    model_ckpt_path: str = "./results/cm"
     resume_ckpt_path: Optional[str] = None
 
 
@@ -75,10 +76,10 @@ def run_training(config: TrainingConfig) -> None:
     dm = ImageDataModule(config.image_dm_config)
 
     # Create student and teacher models and EMA student model
-    student_model = AttUNet(config.AttUNet_config)
-    teacher_model = AttUNet(config.AttUNet_config)
+    student_model = UNet(config.UNet_config)
+    teacher_model = UNet(config.UNet_config)
     teacher_model.load_state_dict(student_model.state_dict())
-    ema_student_model = AttUNet(config.AttUNet_config)
+    ema_student_model = UNet(config.UNet_config)
     ema_student_model.load_state_dict(student_model.state_dict())
 
     # Create lightning module
@@ -100,8 +101,12 @@ def run_training(config: TrainingConfig) -> None:
 
 if __name__ == "__main__":
     training_config = TrainingConfig(
-        image_dm_config=ImageDataModuleConfig("/projects/p32013/WJK/DIFFUSION/learning_diffusion/data/MNIST/MNIST", image_size=(28, 28), num_workers=4),
-        unet_config=AttUNetConfig(),
+        image_dm_config=ImageDataModuleConfig(
+            "/projects/p32013/WJK/DIFFUSION/learning_diffusion/data/butterflies256/",
+            image_size=(256, 256),
+            num_workers=4,
+        ),
+        UNet_config=UNetConfig(image_shape=(3, 256, 256)),
         consistency_training=ConsistencyTraining(final_timesteps=17),
         consistency_sampling=ConsistencySamplingAndEditing(),
         lit_cm_config=LitConsistencyModelConfig(

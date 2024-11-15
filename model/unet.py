@@ -1,29 +1,48 @@
+import math
+import os
+import json
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from typing import Optional
+from dataclasses import asdict, dataclass
+from dataclasses import dataclass, field
+from typing import List, Optional, Tuple
 
-class PositionalEncoding(nn.Module):
+class FlexiblePositionalEncoding(nn.Module):
     def __init__(self, max_seq_len: int, d_model: int):
         super().__init__()
-
-        # Assume d_model is an even number for convenience
         assert d_model % 2 == 0
-
-        pe = torch.zeros(max_seq_len, d_model)
+        
+        self.d_model = d_model
+        self.max_seq_len = max_seq_len
+        
+        # 保持原有的离散嵌入
+        pe = self._create_pe_matrix(max_seq_len, d_model)
+        self.register_buffer('pe', pe)
+        
+    def _create_pe_matrix(self, max_seq_len, d_model):
         i_seq = torch.linspace(0, max_seq_len - 1, max_seq_len)
         j_seq = torch.linspace(0, d_model - 2, d_model // 2)
         pos, two_i = torch.meshgrid(i_seq, j_seq)
         pe_2i = torch.sin(pos / 10000 ** (two_i / d_model))
         pe_2i_1 = torch.cos(pos / 10000 ** (two_i / d_model))
-        pe = torch.stack((pe_2i, pe_2i_1), 2).reshape(max_seq_len, d_model)
-
-        self.embedding = nn.Embedding(max_seq_len, d_model)
-        self.embedding.weight.data = pe
-        self.embedding.requires_grad_(False)
-
+        return torch.stack((pe_2i, pe_2i_1), 2).reshape(max_seq_len, d_model)
+    
     def forward(self, t):
-        return self.embedding(t)
+        if t.dtype in [torch.int32, torch.int64, torch.long]:
+            # 对整数时间步使用离散嵌入
+            return self.pe[t]
+        else:
+            # 对浮点数时间步使用连续编码
+            device = t.device
+            half_dim = self.d_model // 2
+            # embeddings = math.log(10000) / (half_dim - 1)
+            embeddings = torch.log(torch.tensor(10000.)) / (half_dim - 1)
+            embeddings = torch.exp(torch.arange(half_dim, device=device) * -embeddings)
+            embeddings = t[:, None] * embeddings[None, :]
+            embeddings = torch.cat((embeddings.sin(), embeddings.cos()), dim=-1)
+            return embeddings
 
 
 class UnetBlock(nn.Module):
@@ -55,16 +74,25 @@ class UnetBlock(nn.Module):
             out += self.residual_conv(x)
         out = self.activation(out)
         return out
+    
 
+
+@dataclass
+class UNetConfig:
+    n_steps: int = 1000
+    channels: List[int] = field(default_factory=lambda: [10, 20, 40, 80])
+    pe_dim: int = 10
+    residual: bool = False
+    image_shape: Optional[Tuple[int, ...]] = None
 
 class UNet(nn.Module):
-    def __init__(self, n_steps, channels=[10, 20, 40, 80], pe_dim=10, residual=False, image_shape:Optional[tuple]=None):
+    def __init__(self, config:UNetConfig):
         super().__init__()
-        self.channels = channels
-        if image_shape is None:
+        self.channels = config.channels
+        if config.image_shape is None:
             C, H, W = (3, 28, 28)
         else:
-            C, H, W = image_shape
+            C, H, W = config.image_shape
             
         self.initial_channels = C
 
@@ -72,10 +100,10 @@ class UNet(nn.Module):
         self.shapes = self._calculate_shapes(H, W)
 
         # Initialize components
-        self.pe = self._build_positional_encoding(n_steps, pe_dim)
-        self.encoder = self._build_encoder(pe_dim, residual)
-        self.middle_block = self._build_middle_block(pe_dim, residual)
-        self.decoder = self._build_decoder(pe_dim, residual)
+        self.pe = self._build_positional_encoding(config.n_steps, config.pe_dim)
+        self.encoder = self._build_encoder(config.pe_dim, config.residual)
+        self.middle_block = self._build_middle_block(config.pe_dim, config.residual)
+        self.decoder = self._build_decoder(config.pe_dim, config.residual)
         self.projector = self._build_projector()
 
     def _calculate_shapes(self, H, W):
@@ -88,7 +116,7 @@ class UNet(nn.Module):
         return shapes
 
     def _build_positional_encoding(self, n_steps, pe_dim):
-        return PositionalEncoding(n_steps, pe_dim)
+        return FlexiblePositionalEncoding(n_steps, pe_dim)
 
     def _build_encoder(self, pe_dim, residual):
         encoders = nn.ModuleList()
@@ -226,7 +254,28 @@ class UNet(nn.Module):
 
         return x
 
+    def save_pretrained(self, pretrained_path: str) -> None:
+        os.makedirs(pretrained_path, exist_ok=True)
 
+        with open(os.path.join(pretrained_path, "config.json"), mode="w") as f:
+            json.dump(asdict(self.config), f)
+
+        torch.save(self.state_dict(), os.path.join(pretrained_path, "model.pt"))
+
+    @classmethod
+    def from_pretrained(cls, pretrained_path: str) -> "UNet":
+        with open(os.path.join(pretrained_path, "config.json"), mode="r") as f:
+            config_dict = json.load(f)
+        config = UNetConfig(**config_dict)
+
+        model = cls(config)
+
+        state_dict = torch.load(
+            os.path.join(pretrained_path, "model.pt"), map_location=torch.device("cpu")
+        )
+        model.load_state_dict(state_dict)
+
+        return model
 
 
 unet_1_cfg = {"type": "UNet", "channels": [10, 20, 40, 80], "pe_dim": 128}
