@@ -76,3 +76,8 @@ salloc: Granted job allocation 6801856
 salloc: Nodes qgpu2012 are ready for job
 ```
 
+## 2024-11-15 17：00
+
+```cmd
+salloc --account=p32013 -p gengpu --gres gpu:a100:1 --cpus-per-task 12 --mem 50G --constraint=sxm -t 24:00:00
+```
