@@ -13,7 +13,7 @@ import ipdb
 
 from diffusion.ddpm import DDPM
 from diffusion.ddim import DDIM
-from model import UNet
+from models import UNet
 from utils import set_global_random_seed
 
 

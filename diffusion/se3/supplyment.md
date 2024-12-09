@@ -452,3 +452,39 @@ for theta in [np.pi/4, np.pi, 3*np.pi/2]:
 4. 这种表示在旋转插值和优化中特别有用
 
 这就是为什么Omega函数的值域是R^+（更准确地说是[0, π]）的原因。这种设计使得旋转表示更加规范和无歧义。
+
+# 蛋白质
+
+## 二面角
+
+在蛋白质结构中，二面角(torsion angles)是描述蛋白质骨架和侧链构象的重要参数。这7个二面角包括：
+
+1. 主链(backbone)二面角(3个):
+   - φ (phi): C-N-Cα-C 之间的二面角
+   - ψ (psi): N-Cα-C-N 之间的二面角
+   - ω (omega): Cα-C-N-Cα 之间的二面角，通常接近180°(反式)或0°(顺式)
+
+2. 侧链(side chain)二面角(最多4个):
+   - χ1 (chi1): N-Cα-Cβ-Cγ 之间的二面角
+   - χ2 (chi2): Cα-Cβ-Cγ-Cδ 之间的二面角
+   - χ3 (chi3): Cβ-Cγ-Cδ-Cε 之间的二面角
+   - χ4 (chi4): Cγ-Cδ-Cε-Cζ 之间的二面角
+
+我可以补充代码中的注释来说明这一点：
+
+```python:se3_diffusion/experiments/inference_se3_diffusion.py
+class PaddingFeatures(TypedDict):
+    res_mask: torch.Tensor  # [pad_amt] 残基mask,全1
+    fixed_mask: torch.Tensor  # [pad_amt] 固定位置mask,全0
+    rigids_impute: torch.Tensor  # [pad_amt, 4, 4] 刚体变换矩阵,全0
+    torsion_impute: torch.Tensor  # [pad_amt, 7, 2] 7个二面角的sin/cos值,全0
+                                 # 7个二面角包括:
+                                 # - 主链二面角: φ(phi), ψ(psi), ω(omega)
+                                 # - 侧链二面角: χ1, χ2, χ3, χ4
+                                 # 每个角度用(sin,cos)值表示,所以最后一维是2
+```
+
+这些二面角的特点：
+1. 使用sin/cos值而不是角度值的原因是避免周期性问题(比如359°和1°实际上很接近)
+2. 不是所有氨基酸都有4个侧链二面角，较小的氨基酸可能只有1-2个
+3. 这些角度共同决定了蛋白质的三维结构，是蛋白质构象的重要描述符

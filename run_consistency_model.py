@@ -14,7 +14,7 @@ from diffusion import (
     LitConsistencyModel,
     LitConsistencyModelConfig,
 )
-from model import AttUNet, AttUNetConfig, UNet, UNetConfig
+from models import AttUNet, AttUNetConfig, UNet, UNetConfig
 
 
 @dataclass

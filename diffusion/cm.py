@@ -14,7 +14,7 @@ from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
 from torchvision.utils import make_grid
 from tqdm.auto import tqdm
 
-from model import UNet
+from models import UNet
 from utils import pad_dims_like, update_ema_model_
 
 
